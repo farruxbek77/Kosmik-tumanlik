@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="uz">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Qo'l Boshqaruvi - Kengaytirilgan</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            overflow: hidden;
+            background: #000;
+        }
+
+        #container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        #video {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 280px;
+            height: 210px;
+            border: 3px solid #00f3ff;
+            border-radius: 10px;
+            z-index: 10;
+            transform: scaleX(-1);
+            box-shadow: 0 0 20px rgba(0, 243, 255, 0.5);
+        }
+
+        #info {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: #00f3ff;
+            font-size: 14px;
+            z-index: 10;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px;
+            border-radius: 10px;
+            border: 1px solid #00f3ff;
+            max-width: 320px;
+        }
+
+        #info h2 {
+            margin-bottom: 10px;
+            font-size: 18px;
+        }
+
+        #info p {
+            margin: 5px 0;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        .status {
+            color: #ff0055;
+            font-weight: bold;
+        }
+
+        .active {
+            color: #00ff00;
+        }
+
+        #loading {
+            position: fixed;
+            inset: 0;
+            background: #000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #00f3ff;
+            font-size: 24px;
+            z-index: 100;
+            flex-direction: column;
+        }
+
+        #loading p {
+            margin-top: 20px;
+            font-size: 16px;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 0.4;
+            }
+
+            50% {
+                opacity: 1;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div id="loading">
+        <h1>🖐️ 3D QO'L BOSHQARUVI</h1>
+        <p>Yuklanmoqda...</p>
+    </div>
+
+    <div id="container"></div>
+    <video id="video" autoplay playsinline></video>
+
+    <div id="info">
+        <h2>🎮 Boshqaruv</h2>
+        <p>Status: <span class="status" id="status">Kutilmoqda...</span></p>
+        <p>✋ <strong>Ochiq qo'l:</strong> Harakatlantirish</p>
+        <p>✊ <strong>Mushtlash:</strong> Ushlab tortish</p>
+        <p>🤏 <strong>Pinch (2 barmoq):</strong> Kattalashtirish</p>
+        <p>📏 <strong>Qo'l masofasi:</strong> Chuqurlik (Z)</p>
+        <p>👁️ <strong>Qo'l modeli:</strong> 21 nuqta + chiziqlar</p>
+    </div>
+
+    <!-- Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+    <!-- MediaPipe -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+
+    <script>
+        // Scene setup
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x0a0a1a);
+        scene.fog = new THREE.FogExp2(0x0a0a1a, 0.015);
+
+        const camera = new THREE.PerspectiveCamera(
+            60,
+            window.innerWidth / window.innerHeight,
+            0.1,
+            1000
+        );
+        camera.position.set(0, 0, 6);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        document.getElementById('container').appendChild(renderer.domElement);
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        directionalLight.position.set(5, 5, 5);
+        directionalLight.castShadow = true;
+        scene.add(directionalLight);
+
+        const pointLight = new THREE.PointLight(0x00f3ff, 1, 100);
+        pointLight.position.set(0, 3, 3);
+        scene.add(pointLight);
+
+        // Hand visualization - 21 landmarks
+        const handGroup = new THREE.Group();
+        scene.add(handGroup);
+
+        const handPoints = [];
+        for (let i = 0; i < 21; i++) {
+            const geometry = new THREE.SphereGeometry(0.04, 16, 16);
+            const material = new THREE.MeshBasicMaterial({
+                color: 0x00f3ff,
+                transparent: true,
+                opacity: 0.9
+            });
+            const point = new THREE.Mesh(geometry, material);
+            handGroup.add(point);
+            handPoints.push(point);
+        }
+
+        // Hand connections (skeleton)
+        const handConnections = [
+            [0, 1], [1, 2], [2, 3], [3, 4],  // Thumb
+            [0, 5], [5, 6], [6, 7], [7, 8],  // Index
+            [0, 9], [9, 10], [10, 11], [11, 12],  // Middle
+            [0, 13], [13, 14], [14, 15], [15, 16],  // Ring
+            [0, 17], [17, 18], [18, 19], [19, 20],  // Pinky
+            [5, 9], [9, 13], [13, 17]  // Palm
+        ];
+
+        const handLines = [];
+        handConnections.forEach(() => {
+            const material = new THREE.LineBasicMaterial({
+                color: 0x00f3ff,
+                transparent: true,
+                opacity: 0.7,
+                linewidth: 3
+            });
+            const geometry = new THREE.BufferGeometry();
+            const positions = new Float32Array(6);
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            const line = new THREE.Line(geometry, material);
+            handGroup.add(line);
+            handLines.push(line);
+        });
+
+        // Interaction cursor (index finger tip)
+        const cursorGeometry = new THREE.SphereGeometry(0.1, 32, 32);
+        const cursorMaterial = new THREE.MeshBasicMaterial({
+            color: 0xff0055,
+            transparent: true,
+            opacity: 0.8
+        });
+        const cursor = new THREE.Mesh(cursorGeometry, cursorMaterial);
+        scene.add(cursor);
+
+        // Cursor ring
+        const ringGeometry = new THREE.RingGeometry(0.12, 0.15, 32);
+        const ringMaterial = new THREE.MeshBasicMaterial({
+            color: 0xff0055,
+            transparent: true,
+            opacity: 0.5,
+            side: THREE.DoubleSide
+        });
+        const ring = new THREE.Mesh(ringGeometry, ringMaterial);
+        cursor.add(ring);
+
+        // Create interactive objects
+        const objects = [];
+        const geometries = [
+            new THREE.BoxGeometry(0.6, 0.6, 0.6),
+            new THREE.SphereGeometry(0.35, 32, 32),
+            new THREE.ConeGeometry(0.35, 0.7, 32),
+            new THREE.TorusGeometry(0.3, 0.15, 16, 100),
+            new THREE.OctahedronGeometry(0.4)
+        ];
+        const colors = [0xff0055, 0x00f3ff, 0xbc13fe, 0xffaa00, 0x00ff88];
+
+        for (let i = 0; i < 5; i++) {
+            const material = new THREE.MeshStandardMaterial({
+                color: colors[i],
+                metalness: 0.6,
+                roughness: 0.4,
+                emissive: 0x000000
+            });
+            const mesh = new THREE.Mesh(geometries[i], material);
+
+            mesh.position.set(
+                (Math.random() - 0.5) * 8,
+                (Math.random() - 0.5) * 4,
+                (Math.random() - 0.5) * 4
+            );
+
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            mesh.userData.originalColor = colors[i];
+            mesh.userData.originalScale = 1;
+            mesh.userData.isDragging = false;
+            mesh.userData.isScaling = false;
+
+            scene.add(mesh);
+            objects.push(mesh);
+        }
+
+        // Ground
+        const planeGeometry = new THREE.PlaneGeometry(25, 25);
+        const planeMaterial = new THREE.MeshStandardMaterial({
+            color: 0x1a1a2e,
+            side: THREE.DoubleSide,
+            metalness: 0.3,
+            roughness: 0.8
+        });
+        const plane = new THREE.Mesh(planeGeometry, planeMaterial);
+        plane.rotation.x = Math.PI / 2;
+        plane.position.y = -3;
+        plane.receiveShadow = true;
+        scene.add(plane);
+
+        // Grid helper
+        const gridHelper = new THREE.GridHelper(25, 25, 0x00f3ff, 0x444444);
+        gridHelper.position.y = -2.99;
+        scene.add(gridHelper);
+
+        // Variables
+        let handDetected = false;
+        let isGrabbing = false;
+        let isPinching = false;
+        let targetObject = null;
+        let initialPinchDistance = 0;
+        let initialScale = 1;
+
+        const videoElement = document.getElementById('video');
+        const statusElement = document.getElementById('status');
+
+        // MediaPipe Hands
+        const hands = new Hands({
+            locateFile: (file) => {
+                return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+            }
+        });
+
+        hands.setOptions({
+            maxNumHands: 1,
+            modelComplexity: 1,
+            minDetectionConfidence: 0.7,
+            minTrackingConfidence: 0.7
+        });
+
+        hands.onResults(onResults);
+
+        const cameraUtils = new Camera(videoElement, {
+            onFrame: async () => {
+                await hands.send({ image: videoElement });
+            },
+            width: 1280,
+            height: 720
+        });
+
+        cameraUtils.start();
+
+        function onResults(results) {
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                handDetected = true;
+                statusElement.textContent = 'Faol ✓';
+                statusElement.className = 'status active';
+
+                const landmarks = results.multiHandLandmarks[0];
+
+                // Update hand visualization
+                landmarks.forEach((landmark, i) => {
+                    handPoints[i].position.set(
+                        -(landmark.x - 0.5) * 10,
+                        -(landmark.y - 0.5) * 7.5,
+                        -landmark.z * 5
+                    );
+                });
+
+                // Update hand lines
+                handConnections.forEach((connection, i) => {
+                    const [start, end] = connection;
+                    const positions = handLines[i].geometry.attributes.position.array;
+
+                    positions[0] = handPoints[start].position.x;
+                    positions[1] = handPoints[start].position.y;
+                    positions[2] = handPoints[start].position.z;
+                    positions[3] = handPoints[end].position.x;
+                    positions[4] = handPoints[end].position.y;
+                    positions[5] = handPoints[end].position.z;
+
+                    handLines[i].geometry.attributes.position.needsUpdate = true;
+                });
+
+                // Cursor position (index finger tip - landmark 8)
+                const indexTip = landmarks[8];
+                cursor.position.set(
+                    -(indexTip.x - 0.5) * 10,
+                    -(indexTip.y - 0.5) * 7.5,
+                    -indexTip.z * 5
+                );
+
+                // Detect grab (closed fist)
+                const middleMCP = landmarks[9];
+                const middleTip = landmarks[12];
+                const grabDist = Math.sqrt(
+                    Math.pow(middleMCP.x - middleTip.x, 2) +
+                    Math.pow(middleMCP.y - middleTip.y, 2)
+                );
+                isGrabbing = grabDist < 0.06;
+
+                // Detect pinch (thumb + index)
+                const thumb = landmarks[4];
+                const index = landmarks[8];
+                const pinchDist = Math.sqrt(
+                    Math.pow(thumb.x - index.x, 2) +
+                    Math.pow(thumb.y - index.y, 2) +
+                    Math.pow(thumb.z - index.z, 2)
+                );
+
+                const wasPinching = isPinching;
+                isPinching = pinchDist < 0.05;
+
+                // Start pinch - save initial distance
+                if (isPinching && !wasPinching && targetObject) {
+                    initialPinchDistance = pinchDist;
+                    initialScale = targetObject.scale.x;
+                }
+
+                // Scale object during pinch
+                if (isPinching && targetObject && initialPinchDistance > 0) {
+                    const scaleFactor = pinchDist / initialPinchDistance;
+                    const newScale = THREE.MathUtils.clamp(
+                        initialScale * scaleFactor,
+                        0.3,
+                        3
+                    );
+                    targetObject.scale.setScalar(newScale);
+                }
+
+                // Update cursor color
+                if (isPinching) {
+                    cursorMaterial.color.setHex(0xbc13fe);
+                    ringMaterial.color.setHex(0xbc13fe);
+                } else if (isGrabbing) {
+                    cursorMaterial.color.setHex(0xff0055);
+                    ringMaterial.color.setHex(0xff0055);
+                } else {
+                    cursorMaterial.color.setHex(0x00f3ff);
+                    ringMaterial.color.setHex(0x00f3ff);
+                }
+
+            } else {
+                handDetected = false;
+                statusElement.textContent = 'Qo\'l topilmadi';
+                statusElement.className = 'status';
+                isGrabbing = false;
+                isPinching = false;
+
+                // Hide hand visualization
+                handPoints.forEach(point => {
+                    point.position.set(0, -100, 0);
+                });
+            }
+        }
+
+        // Animation
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // Rotate cursor ring
+            ring.rotation.z += 0.02;
+
+            // Object interactions
+            objects.forEach(obj => {
+                const distance = cursor.position.distanceTo(obj.position);
+
+                if (distance < 0.8) {
+                    // Hover effect
+                    obj.material.emissive.setHex(0x222222);
+
+                    // Grab
+                    if (isGrabbing && !isPinching) {
+                        obj.userData.isDragging = true;
+                        targetObject = obj;
+                    }
+
+                    // Pinch to scale
+                    if (isPinching) {
+                        targetObject = obj;
+                        obj.userData.isScaling = true;
+                    }
+
+                } else {
+                    obj.material.emissive.setHex(0x000000);
+
+                    if (!isGrabbing && !isPinching) {
+                        obj.userData.isDragging = false;
+                        obj.userData.isScaling = false;
+                        if (targetObject === obj) {
+                            targetObject = null;
+                        }
+                    }
+                }
+
+                // Drag object
+                if (obj.userData.isDragging && isGrabbing && !isPinching) {
+                    obj.position.lerp(cursor.position, 0.15);
+                }
+
+                // Stop dragging
+                if (!isGrabbing && obj.userData.isDragging) {
+                    obj.userData.isDragging = false;
+                }
+
+                // Stop scaling
+                if (!isPinching && obj.userData.isScaling) {
+                    obj.userData.isScaling = false;
+                }
+
+                // Rotate objects
+                obj.rotation.x += 0.005;
+                obj.rotation.y += 0.008;
+            });
+
+            // Animate point light
+            pointLight.position.x = Math.sin(Date.now() * 0.001) * 5;
+            pointLight.position.z = Math.cos(Date.now() * 0.001) * 5;
+
+            renderer.render(scene, camera);
+        }
+
+        // Resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // Hide loading
+        setTimeout(() => {
+            document.getElementById('loading').style.display = 'none';
+        }, 2000);
+
+        animate();
+    </script>
+</body>
+
+</html>
