@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="uz">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Qo'l Chizish - Avtomatik 3D</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            overflow: hidden;
+            background: #000;
+        }
+
+        #container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        #video {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 280px;
+            height: 210px;
+            border: 3px solid #00f3ff;
+            border-radius: 10px;
+            z-index: 10;
+            transform: scaleX(-1);
+            box-shadow: 0 0 20px rgba(0, 243, 255, 0.5);
+        }
+
+        #info {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: #00f3ff;
+            font-size: 13px;
+            z-index: 10;
+            background: rgba(0, 0, 0, 0.85);
+            padding: 15px;
+            border-radius: 10px;
+            border: 1px solid #00f3ff;
+            max-width: 340px;
+        }
+
+        #info h2 {
+            margin-bottom: 10px;
+            font-size: 18px;
+        }
+
+        #info p {
+            margin: 5px 0;
+            font-size: 12px;
+            line-height: 1.6;
+        }
+
+        .status {
+            color: #ff0055;
+            font-weight: bold;
+        }
+
+        .active {
+            color: #00ff00;
+        }
+
+        .highlight {
+            color: #ffaa00;
+            font-weight: bold;
+        }
+
+        .controls {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .btn {
+            background: rgba(0, 243, 255, 0.2);
+            border: 2px solid #00f3ff;
+            color: #00f3ff;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+
+        .btn:hover {
+            background: rgba(0, 243, 255, 0.4);
+            box-shadow: 0 0 15px rgba(0, 243, 255, 0.5);
+        }
+
+        #loading {
+            position: fixed;
+            inset: 0;
+            background: #000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #00f3ff;
+            font-size: 24px;
+            z-index: 100;
+            flex-direction: column;
+        }
+
+        #loading p {
+            margin-top: 20px;
+            font-size: 16px;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 0.4;
+            }
+
+            50% {
+                opacity: 1;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div id="loading">
+        <h1>🎨 AVTOMATIK 3D CHIZISH</h1>
+        <p>Yuklanmoqda...</p>
+    </div>
+
+    <div id="container"></div>
+    <video id="video" autoplay playsinline></video>
+
+    <div id="info">
+        <h2>🎨 Avtomatik 3D</h2>
+        <p>Status: <span class="status" id="status">Kutilmoqda...</span></p>
+        <p>✌️ <strong>Victory (2 barmoq):</strong> Chizish</p>
+        <p>✊ <strong>Mushtlash:</strong> Shaklni sudrab olib borish</p>
+        <p>🤏 <strong>Pinch:</strong> Shaklni aylantirish</p>
+        <p>🎨 <strong>Rang:</strong> <span id="currentColor" style="color: #00f3ff;">Ko'k</span></p>
+        <p class="highlight">💡 Chiziq tugallanganda avtomatik 3D shakl bo'ladi!</p>
+    </div>
+
+    <div class="controls">
+        <button class="btn" onclick="clearAll()">🗑️ Hammasini tozalash</button>
+        <button class="btn" onclick="changeColor()">🎨 Rang o'zgartirish</button>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+
+    <script>
+        // Scene
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x0a0a1a);
+        scene.fog = new THREE.FogExp2(0x0a0a1a, 0.008);
+
+        const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 1000);
+        camera.position.set(0, 0, 10);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(innerWidth, innerHeight);
+        renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        document.getElementById('container').appendChild(renderer.domElement);
+
+        // Lights
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+
+        const pointLight = new THREE.PointLight(0x00f3ff, 1.5, 100);
+        pointLight.position.set(0, 5, 5);
+        pointLight.castShadow = true;
+        scene.add(pointLight);
+
+        const spotLight = new THREE.SpotLight(0xff0055, 0.8);
+        spotLight.position.set(-5, 5, 5);
+        scene.add(spotLight);
+
+        // Hand visualization
+        const handGroup = new THREE.Group();
+        scene.add(handGroup);
+
+        const handPoints = [];
+        for (let i = 0; i < 21; i++) {
+            const geo = new THREE.SphereGeometry(0.03, 16, 16);
+            const mat = new THREE.MeshBasicMaterial({ color: 0x00f3ff, transparent: true, opacity: 0.7 });
+            const point = new THREE.Mesh(geo, mat);
+            handGroup.add(point);
+            handPoints.push(point);
+        }
+
+        // Hand connections
+        const connections = [
+            [0, 1], [1, 2], [2, 3], [3, 4], [0, 5], [5, 6], [6, 7], [7, 8],
+            [0, 9], [9, 10], [10, 11], [11, 12], [0, 13], [13, 14], [14, 15], [15, 16],
+            [0, 17], [17, 18], [18, 19], [19, 20], [5, 9], [9, 13], [13, 17]
+        ];
+
+        const handLines = [];
+        connections.forEach(() => {
+            const mat = new THREE.LineBasicMaterial({ color: 0x00f3ff, transparent: true, opacity: 0.4 });
+            const geo = new THREE.BufferGeometry();
+            geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
+            const line = new THREE.Line(geo, mat);
+            handGroup.add(line);
+            handLines.push(line);
+        });
+
+        // Cursor
+        const cursor = new THREE.Mesh(
+            new THREE.SphereGeometry(0.08, 32, 32),
+            new THREE.MeshBasicMaterial({ color: 0x00f3ff, transparent: true, opacity: 0.9 })
+        );
+        scene.add(cursor);
+
+        // Grid
+        const grid = new THREE.GridHelper(30, 30, 0x00f3ff, 0x222222);
+        grid.position.y = -4;
+        scene.add(grid);
+
+        // Drawing data
+        const shapes = [];
+        let currentPath = null;
+        let currentColor = 0x00f3ff;
+        const colors = [0x00f3ff, 0xff0055, 0xbc13fe, 0xffaa00, 0x00ff88, 0xffffff];
+        const colorNames = ['Ko\'k', 'Qizil', 'Binafsha', 'Sariq', 'Yashil', 'Oq'];
+        let colorIndex = 0;
+
+        let isDrawing = false;
+        let isGrabbing = false;
+        let isPinching = false;
+        let selectedShape = null;
+        let handDetected = false;
+
+        const videoElement = document.getElementById('video');
+        const statusElement = document.getElementById('status');
+
+        // MediaPipe
+        const hands = new Hands({
+            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+        });
+
+        hands.setOptions({
+            maxNumHands: 1,
+            modelComplexity: 1,
+            minDetectionConfidence: 0.7,
+            minTrackingConfidence: 0.7
+        });
+
+        hands.onResults(onResults);
+
+        new Camera(videoElement, {
+            onFrame: async () => await hands.send({ image: videoElement }),
+            width: 1280,
+            height: 720
+        }).start();
+
+        function onResults(results) {
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                handDetected = true;
+                statusElement.textContent = 'Faol ✓';
+                statusElement.className = 'status active';
+
+                const landmarks = results.multiHandLandmarks[0];
+
+                // Update hand points
+                landmarks.forEach((lm, i) => {
+                    handPoints[i].position.set(
+                        -(lm.x - 0.5) * 14,
+                        -(lm.y - 0.5) * 10.5,
+                        -lm.z * 7
+                    );
+                });
+
+                // Update hand lines
+                connections.forEach((conn, i) => {
+                    const pos = handLines[i].geometry.attributes.position.array;
+                    pos[0] = handPoints[conn[0]].position.x;
+                    pos[1] = handPoints[conn[0]].position.y;
+                    pos[2] = handPoints[conn[0]].position.z;
+                    pos[3] = handPoints[conn[1]].position.x;
+                    pos[4] = handPoints[conn[1]].position.y;
+                    pos[5] = handPoints[conn[1]].position.z;
+                    handLines[i].geometry.attributes.position.needsUpdate = true;
+                });
+
+                // Cursor (index tip)
+                const indexTip = landmarks[8];
+                cursor.position.set(
+                    -(indexTip.x - 0.5) * 14,
+                    -(indexTip.y - 0.5) * 10.5,
+                    -indexTip.z * 7
+                );
+
+                // Detect Victory (2 fingers up)
+                const indexUp = landmarks[8].y < landmarks[5].y;
+                const middleUp = landmarks[12].y < landmarks[9].y;
+                const ringDown = landmarks[16].y > landmarks[13].y;
+                const pinkyDown = landmarks[20].y > landmarks[17].y;
+                const isVictory = indexUp && middleUp && ringDown && pinkyDown;
+
+                // Detect Grab
+                const grabDist = Math.hypot(
+                    landmarks[9].x - landmarks[12].x,
+                    landmarks[9].y - landmarks[12].y
+                );
+                isGrabbing = grabDist < 0.06;
+
+                // Detect Pinch
+                const pinchDist = Math.hypot(
+                    landmarks[4].x - landmarks[8].x,
+                    landmarks[4].y - landmarks[8].y
+                );
+                isPinching = pinchDist < 0.05;
+
+                // Drawing
+                if (isVictory && !isGrabbing && !isPinching) {
+                    if (!currentPath) {
+                        currentPath = {
+                            points: [],
+                            color: currentColor,
+                            line: null,
+                            mesh: null
+                        };
+                        shapes.push(currentPath);
+                    }
+
+                    currentPath.points.push(cursor.position.clone());
+
+                    if (currentPath.points.length > 1) {
+                        if (currentPath.line) scene.remove(currentPath.line);
+
+                        const geo = new THREE.BufferGeometry().setFromPoints(currentPath.points);
+                        const mat = new THREE.LineBasicMaterial({ color: currentPath.color, linewidth: 3 });
+                        currentPath.line = new THREE.Line(geo, mat);
+                        scene.add(currentPath.line);
+                    }
+
+                    cursor.material.color.setHex(0x00ff00);
+                    isDrawing = true;
+                } else {
+                    if (currentPath && currentPath.points.length > 5) {
+                        // Convert to 3D automatically
+                        convertTo3D(currentPath);
+                        currentPath = null;
+                    }
+                    isDrawing = false;
+                }
+
+                // Grab shape
+                if (isGrabbing && !isVictory && !isPinching) {
+                    cursor.material.color.setHex(0xff0055);
+
+                    if (!selectedShape) {
+                        let minDist = Infinity;
+                        shapes.forEach(shape => {
+                            if (shape.mesh) {
+                                const dist = cursor.position.distanceTo(shape.mesh.position);
+                                if (dist < minDist && dist < 2) {
+                                    minDist = dist;
+                                    selectedShape = shape;
+                                }
+                            }
+                        });
+                    }
+
+                    if (selectedShape && selectedShape.mesh) {
+                        selectedShape.mesh.position.lerp(cursor.position, 0.1);
+                    }
+                } else {
+                    selectedShape = null;
+                }
+
+                // Pinch to rotate
+                if (isPinching && !isVictory && !isGrabbing) {
+                    cursor.material.color.setHex(0xbc13fe);
+                    shapes.forEach(shape => {
+                        if (shape.mesh) {
+                            shape.mesh.rotation.y += 0.03;
+                        }
+                    });
+                }
+
+                if (!isVictory && !isGrabbing && !isPinching) {
+                    cursor.material.color.setHex(currentColor);
+                }
+
+            } else {
+                handDetected = false;
+                statusElement.textContent = 'Qo\'l topilmadi';
+                statusElement.className = 'status';
+                currentPath = null;
+                handPoints.forEach(p => p.position.set(0, -100, 0));
+            }
+        }
+
+        // Convert 2D path to 3D mesh
+        function convertTo3D(path) {
+            if (path.line) scene.remove(path.line);
+
+            if (path.points.length < 3) return;
+
+            // Create shape from points
+            const shape = new THREE.Shape();
+
+            // Project to 2D (use XY plane)
+            const points2D = path.points.map(p => new THREE.Vector2(p.x, p.y));
+
+            shape.moveTo(points2D[0].x, points2D[0].y);
+            for (let i = 1; i < points2D.length; i++) {
+                shape.lineTo(points2D[i].x, points2D[i].y);
+            }
+            shape.lineTo(points2D[0].x, points2D[0].y); // Close path
+
+            // Extrude settings
+            const extrudeSettings = {
+                depth: 0.5,
+                bevelEnabled: true,
+                bevelThickness: 0.1,
+                bevelSize: 0.1,
+                bevelSegments: 3
+            };
+
+            const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+            const material = new THREE.MeshStandardMaterial({
+                color: path.color,
+                metalness: 0.5,
+                roughness: 0.5,
+                emissive: path.color,
+                emissiveIntensity: 0.2
+            });
+
+            const mesh = new THREE.Mesh(geometry, material);
+
+            // Position at average Z
+            const avgZ = path.points.reduce((sum, p) => sum + p.z, 0) / path.points.length;
+            mesh.position.z = avgZ;
+
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+
+            scene.add(mesh);
+            path.mesh = mesh;
+        }
+
+        // Animation
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // Rotate lights
+            const time = Date.now() * 0.001;
+            pointLight.position.x = Math.sin(time) * 8;
+            pointLight.position.z = Math.cos(time) * 8;
+
+            // Rotate 3D shapes slowly
+            shapes.forEach(shape => {
+                if (shape.mesh && !selectedShape) {
+                    shape.mesh.rotation.x += 0.002;
+                    shape.mesh.rotation.y += 0.003;
+                }
+            });
+
+            renderer.render(scene, camera);
+        }
+
+        // Controls
+        function clearAll() {
+            shapes.forEach(shape => {
+                if (shape.line) scene.remove(shape.line);
+                if (shape.mesh) scene.remove(shape.mesh);
+            });
+            shapes.length = 0;
+            currentPath = null;
+        }
+
+        function changeColor() {
+            colorIndex = (colorIndex + 1) % colors.length;
+            currentColor = colors[colorIndex];
+            cursor.material.color.setHex(currentColor);
+            document.getElementById('currentColor').textContent = colorNames[colorIndex];
+            document.getElementById('currentColor').style.color = '#' + currentColor.toString(16).padStart(6, '0');
+        }
+
+        // Resize
+        window.addEventListener('resize', () => {
+            camera.aspect = innerWidth / innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(innerWidth, innerHeight);
+        });
+
+        setTimeout(() => document.getElementById('loading').style.display = 'none', 2000);
+        animate();
+    </script>
+</body>
+
+</html>
