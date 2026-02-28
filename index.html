@@ -275,36 +275,11 @@
             }
         }
 
-        #title-display {
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            z-index: 5;
-            font-family: 'Orbitron', sans-serif;
-            font-size: 4rem;
-            font-weight: 700;
-            color: var(--neon-cyan);
-            text-shadow:
-                0 0 20px var(--neon-cyan),
-                0 0 40px var(--neon-cyan),
-                0 0 60px var(--neon-purple);
-            letter-spacing: 8px;
-            text-transform: uppercase;
-            pointer-events: none;
-            white-space: nowrap;
-        }
-
         canvas#text-canvas {
             display: none;
         }
 
         @media (max-width: 600px) {
-            #title-display {
-                font-size: 2rem;
-                letter-spacing: 4px;
-            }
-
             .hud-container {
                 padding: 20px 15px;
             }
@@ -340,8 +315,6 @@
         <h2>KOSMIK TEXNOLOGIYA</h2>
         <p>Nebula tizimi ishga tushmoqda...</p>
     </div>
-
-    <div id="title-display"></div>
 
     <div class="ui-panel">
         <div class="hud-container">
@@ -559,7 +532,6 @@
 
             let scale = 0.065;
 
-            // Matn nuqtalarini olish
             for (let y = 0; y < maxHeight; y += 3) {
                 for (let x = 0; x < maxWidth; x += 3) {
                     if (img[(y * maxWidth + x) * 4 + 3] > 128) {
@@ -570,19 +542,12 @@
 
             if (pts.length === 0) return sphere();
 
-            // Zarrachalarni matn nuqtalariga taqsimlash
             for (let i = 0; i < COUNT; i++) {
                 let i3 = i * 3;
                 let p = pts[i % pts.length];
-
-                // Har bir nuqta atrofida zarrachalarni ozgina tarqatish
-                const spread = 0.8;
-                const offsetX = (Math.random() - 0.5) * spread;
-                const offsetY = (Math.random() - 0.5) * spread;
-
-                target[i3] = p.x + offsetX;
-                target[i3 + 1] = p.y + offsetY;
-                target[i3 + 2] = (Math.random() - 0.5) * 3;
+                target[i3] = p.x;
+                target[i3 + 1] = p.y;
+                target[i3 + 2] = (Math.random() - 0.5) * 5;
             }
         }
 
@@ -662,10 +627,6 @@
         const btn = document.getElementById("btn");
         const textInput = document.getElementById("textInput");
         const loading = document.getElementById("loading");
-        const titleDisplay = document.getElementById("title-display");
-
-        // Boshlang'ichda logo yo'q
-        titleDisplay.textContent = "";
 
         document.getElementById("baseColor").addEventListener("input", (e) => {
             baseColor = new THREE.Color(e.target.value);
@@ -677,13 +638,8 @@
 
         btn.onclick = () => {
             const v = textInput.value.trim();
-            if (v) {
-                textShape(v);
-                titleDisplay.textContent = v.toUpperCase();
-            } else {
-                sphere();
-                titleDisplay.textContent = "";
-            }
+            if (v) textShape(v);
+            else sphere();
         };
 
         textInput.addEventListener("keypress", (e) => {
