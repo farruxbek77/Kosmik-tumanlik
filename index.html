@@ -656,8 +656,8 @@
         const loading = document.getElementById("loading");
         const titleDisplay = document.getElementById("title-display");
 
-        // Boshlang'ich matn
-        titleDisplay.textContent = "FARRUXBEK";
+        // Boshlang'ichda logo yo'q
+        titleDisplay.textContent = "";
 
         document.getElementById("baseColor").addEventListener("input", (e) => {
             baseColor = new THREE.Color(e.target.value);
@@ -674,7 +674,7 @@
                 titleDisplay.textContent = v.toUpperCase();
             } else {
                 sphere();
-                titleDisplay.textContent = "FARRUXBEK";
+                titleDisplay.textContent = "";
             }
         };
 
