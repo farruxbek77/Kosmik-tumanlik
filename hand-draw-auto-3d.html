@@ -150,11 +150,12 @@
     <div id="info">
         <h2>🎨 Avtomatik 3D</h2>
         <p>Status: <span class="status" id="status">Kutilmoqda...</span></p>
-        <p>✌️ <strong>Victory (2 barmoq):</strong> Chizish</p>
+        <p>👆 <strong>Ko'rsatkich barmoq:</strong> Chizish (boshqa barmoqlar yopiq)</p>
         <p>✊ <strong>Mushtlash:</strong> Shaklni sudrab olib borish</p>
         <p>🤏 <strong>Pinch:</strong> Shaklni aylantirish</p>
         <p>🎨 <strong>Rang:</strong> <span id="currentColor" style="color: #00f3ff;">Ko'k</span></p>
         <p class="highlight">💡 Chiziq tugallanganda avtomatik 3D shakl bo'ladi!</p>
+        <p style="font-size: 11px; color: #888;">Debug: <span id="debug">-</span></p>
     </div>
 
     <div class="controls">
@@ -310,12 +311,32 @@
                     -indexTip.z * 7
                 );
 
-                // Detect Victory (2 fingers up)
-                const indexUp = landmarks[8].y < landmarks[5].y;
-                const middleUp = landmarks[12].y < landmarks[9].y;
-                const ringDown = landmarks[16].y > landmarks[13].y;
-                const pinkyDown = landmarks[20].y > landmarks[17].y;
+                // Detect Victory (2 fingers up) - IMPROVED
+                const indexMCP = landmarks[5];
+                const middleMCP = landmarks[9];
+                const ringMCP = landmarks[13];
+                const pinkyMCP = landmarks[17];
+
+                const indexUp = landmarks[8].y < indexMCP.y - 0.05;
+                const middleUp = landmarks[12].y < middleMCP.y - 0.05;
+                const ringDown = landmarks[16].y > ringMCP.y;
+                const pinkyDown = landmarks[20].y > pinkyMCP.y;
+
                 const isVictory = indexUp && middleUp && ringDown && pinkyDown;
+
+                // ALTERNATIVE: Point gesture (only index finger up)
+                const thumbClosed = landmarks[4].y > landmarks[2].y;
+                const middleClosed = landmarks[12].y > middleMCP.y;
+                const ringClosed = landmarks[16].y > ringMCP.y + 0.02;
+                const pinkyClosed = landmarks[20].y > pinkyMCP.y + 0.02;
+                const isPointing = indexUp && thumbClosed && middleClosed && ringClosed && pinkyClosed;
+
+                // Use either Victory or Pointing
+                const canDraw = isVictory || isPointing;
+
+                // Debug info
+                document.getElementById('debug').textContent =
+                    `V:${isVictory} P:${isPointing} D:${canDraw}`;
 
                 // Detect Grab
                 const grabDist = Math.hypot(
@@ -332,7 +353,7 @@
                 isPinching = pinchDist < 0.05;
 
                 // Drawing
-                if (isVictory && !isGrabbing && !isPinching) {
+                if (canDraw && !isGrabbing && !isPinching) {
                     if (!currentPath) {
                         currentPath = {
                             points: [],
@@ -366,7 +387,7 @@
                 }
 
                 // Grab shape
-                if (isGrabbing && !isVictory && !isPinching) {
+                if (isGrabbing && !canDraw && !isPinching) {
                     cursor.material.color.setHex(0xff0055);
 
                     if (!selectedShape) {
@@ -390,7 +411,7 @@
                 }
 
                 // Pinch to rotate
-                if (isPinching && !isVictory && !isGrabbing) {
+                if (isPinching && !canDraw && !isGrabbing) {
                     cursor.material.color.setHex(0xbc13fe);
                     shapes.forEach(shape => {
                         if (shape.mesh) {
@@ -399,7 +420,7 @@
                     });
                 }
 
-                if (!isVictory && !isGrabbing && !isPinching) {
+                if (!canDraw && !isGrabbing && !isPinching) {
                     cursor.material.color.setHex(currentColor);
                 }
 
@@ -511,4 +532,4 @@
     </script>
 </body>
 
-</html>
+</html>he
