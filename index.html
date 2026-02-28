@@ -559,9 +559,9 @@
 
             let scale = 0.065;
 
-            // Ko'proq nuqta olish uchun sampling'ni kamaytirish
-            for (let y = 0; y < maxHeight; y += 2) {
-                for (let x = 0; x < maxWidth; x += 2) {
+            // Matn nuqtalarini olish
+            for (let y = 0; y < maxHeight; y += 3) {
+                for (let x = 0; x < maxWidth; x += 3) {
                     if (img[(y * maxWidth + x) * 4 + 3] > 128) {
                         pts.push({ x: (x - maxWidth / 2) * scale, y: (maxHeight / 2 - y) * scale });
                     }
@@ -571,20 +571,18 @@
             if (pts.length === 0) return sphere();
 
             // Zarrachalarni matn nuqtalariga taqsimlash
-            const ptsPerParticle = Math.ceil(COUNT / pts.length);
-
             for (let i = 0; i < COUNT; i++) {
                 let i3 = i * 3;
                 let p = pts[i % pts.length];
 
-                // Har bir nuqta atrofida zarrachalarni tarqatish
-                const spread = 2.0;
+                // Har bir nuqta atrofida zarrachalarni ozgina tarqatish
+                const spread = 0.8;
                 const offsetX = (Math.random() - 0.5) * spread;
                 const offsetY = (Math.random() - 0.5) * spread;
 
                 target[i3] = p.x + offsetX;
                 target[i3 + 1] = p.y + offsetY;
-                target[i3 + 2] = (Math.random() - 0.5) * 8;
+                target[i3 + 2] = (Math.random() - 0.5) * 3;
             }
         }
 
