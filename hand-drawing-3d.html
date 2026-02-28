@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="uz">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Qo'l Chizish - Hand Drawing</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            overflow: hidden;
+            background: #000;
+        }
+
+        #container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        #video {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 280px;
+            height: 210px;
+            border: 3px solid #00f3ff;
+            border-radius: 10px;
+            z-index: 10;
+            transform: scaleX(-1);
+            box-shadow: 0 0 20px rgba(0, 243, 255, 0.5);
+        }
+
+        #info {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: #00f3ff;
+            font-size: 14px;
+            z-index: 10;
+            background: rgba(0, 0, 0, 0.85);
+            padding: 15px;
+            border-radius: 10px;
+            border: 1px solid #00f3ff;
+            max-width: 320px;
+        }
+
+        #info h2 {
+            margin-bottom: 10px;
+            font-size: 18px;
+        }
+
+        #info p {
+            margin: 5px 0;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        .status {
+            color: #ff0055;
+            font-weight: bold;
+        }
+
+        .active {
+            color: #00ff00;
+        }
+
+        .controls {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn {
+            background: rgba(0, 243, 255, 0.2);
+            border: 2px solid #00f3ff;
+            color: #00f3ff;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+
+        .btn:hover {
+            background: rgba(0, 243, 255, 0.4);
+            box-shadow: 0 0 15px rgba(0, 243, 255, 0.5);
+        }
+
+        .btn.active {
+            background: rgba(255, 0, 85, 0.3);
+            border-color: #ff0055;
+            color: #ff0055;
+        }
+
+        #loading {
+            position: fixed;
+            inset: 0;
+            background: #000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #00f3ff;
+            font-size: 24px;
+            z-index: 100;
+            flex-direction: column;
+        }
+
+        #loading p {
+            margin-top: 20px;
+            font-size: 16px;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 0.4;
+            }
+
+            50% {
+                opacity: 1;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div id="loading">
+        <h1>✍️ 3D QO'L CHIZISH</h1>
+        <p>Yuklanmoqda...</p>
+    </div>
+
+    <div id="container"></div>
+    <video id="video" autoplay playsinline></video>
+
+    <div id="info">
+        <h2>✍️ 3D Chizish</h2>
+        <p>Status: <span class="status" id="status">Kutilmoqda...</span></p>
+        <p>✌️ <strong>2 barmoq (Victory):</strong> Chizish</p>
+        <p>✊ <strong>Mushtlash:</strong> Chiziqni harakatlantirish</p>
+        <p>🤏 <strong>Pinch:</strong> Chiziqni aylantirish</p>
+        <p>📏 <strong>Qo'l masofasi:</strong> Chuqurlik (Z)</p>
+        <p>🎨 <strong>Rang:</strong> <span id="currentColor" style="color: #00f3ff;">Ko'k</span></p>
+    </div>
+
+    <div class="controls">
+        <button class="btn" onclick="clearDrawing()">🗑️ Tozalash</button>
+        <button class="btn" onclick="changeColor()">🎨 Rang</button>
+        <button class="btn" id="modeBtn" onclick="toggleMode()">✏️ Chizish</button>
+    </div>
+
+    <!-- Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+    <!-- MediaPipe -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+
+    <script>
+        // Scene setup
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x0a0a1a);
+        scene.fog = new THREE.FogExp2(0x0a0a1a, 0.01);
+
+        const camera = new THREE.PerspectiveCamera(
+            60,
+            window.innerWidth / window.innerHeight,
+            0.1,
+            1000
+        );
+        camera.position.set(0, 0, 8);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        document.getElementById('container').appendChild(renderer.domElement);
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+
+        const pointLight = new THREE.PointLight(0x00f3ff, 1, 100);
+        pointLight.position.set(0, 5, 5);
+        scene.add(pointLight);
+
+        // Hand visualization
+        const handGroup = new THREE.Group();
+        scene.add(handGroup);
+
+        const handPoints = [];
+        for (let i = 0; i < 21; i++) {
+            const geometry = new THREE.SphereGeometry(0.03, 16, 16);
+            const material = new THREE.MeshBasicMaterial({
+                color: 0x00f3ff,
+                transparent: true,
+                opacity: 0.8
+            });
+            const point = new THREE.Mesh(geometry, material);
+            handGroup.add(point);
+            handPoints.push(point);
+        }
+
+        // Hand connections
+        const handConnections = [
+            [0, 1], [1, 2], [2, 3], [3, 4],
+            [0, 5], [5, 6], [6, 7], [7, 8],
+            [0, 9], [9, 10], [10, 11], [11, 12],
+            [0, 13], [13, 14], [14, 15], [15, 16],
+            [0, 17], [17, 18], [18, 19], [19, 20],
+            [5, 9], [9, 13], [13, 17]
+        ];
+
+        const handLines = [];
+        handConnections.forEach(() => {
+            const material = new THREE.LineBasicMaterial({
+                color: 0x00f3ff,
+                transparent: true,
+                opacity: 0.5,
+                linewidth: 2
+            });
+            const geometry = new THREE.BufferGeometry();
+            const positions = new Float32Array(6);
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            const line = new THREE.Line(geometry, material);
+            handGroup.add(line);
+            handLines.push(line);
+        });
+
+        // Drawing cursor
+        const cursorGeometry = new THREE.SphereGeometry(0.08, 32, 32);
+        const cursorMaterial = new THREE.MeshBasicMaterial({
+            color: 0x00f3ff,
+            transparent: true,
+            opacity: 0.9
+        });
+        const cursor = new THREE.Mesh(cursorGeometry, cursorMaterial);
+        scene.add(cursor);
+
+        // Cursor trail
+        const trailGeometry = new THREE.SphereGeometry(0.12, 16, 16);
+        const trailMaterial = new THREE.MeshBasicMaterial({
+            color: 0x00f3ff,
+            transparent: true,
+            opacity: 0.3
+        });
+        const trail = new THREE.Mesh(trailGeometry, trailMaterial);
+        cursor.add(trail);
+
+        // Drawing storage
+        const drawings = [];
+        let currentDrawing = null;
+        let currentColor = 0x00f3ff;
+        const colors = [0x00f3ff, 0xff0055, 0xbc13fe, 0xffaa00, 0x00ff88, 0xffffff];
+        const colorNames = ['Ko\'k', 'Qizil', 'Binafsha', 'Sariq', 'Yashil', 'Oq'];
+        let colorIndex = 0;
+
+        // Drawing mode
+        let isDrawing = false;
+        let isGrabbing = false;
+        let isPinching = false;
+        let selectedDrawing = null;
+
+        // Grid
+        const gridHelper = new THREE.GridHelper(20, 20, 0x00f3ff, 0x333333);
+        gridHelper.position.y = -3;
+        scene.add(gridHelper);
+
+        // Variables
+        let handDetected = false;
+        const videoElement = document.getElementById('video');
+        const statusElement = document.getElementById('status');
+
+        // MediaPipe Hands
+        const hands = new Hands({
+            locateFile: (file) => {
+                return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+            }
+        });
+
+        hands.setOptions({
+            maxNumHands: 1,
+            modelComplexity: 1,
+            minDetectionConfidence: 0.7,
+            minTrackingConfidence: 0.7
+        });
+
+        hands.onResults(onResults);
+
+        const cameraUtils = new Camera(videoElement, {
+            onFrame: async () => {
+                await hands.send({ image: videoElement });
+            },
+            width: 1280,
+            height: 720
+        });
+
+        cameraUtils.start();
+
+        function onResults(results) {
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                handDetected = true;
+                statusElement.textContent = 'Faol ✓';
+                statusElement.className = 'status active';
+
+                const landmarks = results.multiHandLandmarks[0];
+
+                // Update hand visualization
+                landmarks.forEach((landmark, i) => {
+                    handPoints[i].position.set(
+                        -(landmark.x - 0.5) * 12,
+                        -(landmark.y - 0.5) * 9,
+                        -landmark.z * 6
+                    );
+                });
+
+                // Update hand lines
+                handConnections.forEach((connection, i) => {
+                    const [start, end] = connection;
+                    const positions = handLines[i].geometry.attributes.position.array;
+
+                    positions[0] = handPoints[start].position.x;
+                    positions[1] = handPoints[start].position.y;
+                    positions[2] = handPoints[start].position.z;
+                    positions[3] = handPoints[end].position.x;
+                    positions[4] = handPoints[end].position.y;
+                    positions[5] = handPoints[end].position.z;
+
+                    handLines[i].geometry.attributes.position.needsUpdate = true;
+                });
+
+                // Index finger tip for cursor
+                const indexTip = landmarks[8];
+                const cursorPos = new THREE.Vector3(
+                    -(indexTip.x - 0.5) * 12,
+                    -(indexTip.y - 0.5) * 9,
+                    -indexTip.z * 6
+                );
+                cursor.position.copy(cursorPos);
+
+                // Detect Victory sign (2 fingers) for drawing
+                const indexMCP = landmarks[5];
+                const middleMCP = landmarks[9];
+                const middleTip = landmarks[12];
+                const ringTip = landmarks[16];
+                const pinkyTip = landmarks[20];
+
+                const indexUp = landmarks[8].y < indexMCP.y;
+                const middleUp = middleTip.y < middleMCP.y;
+                const ringDown = ringTip.y > landmarks[13].y;
+                const pinkyDown = pinkyTip.y > landmarks[17].y;
+
+                const isVictory = indexUp && middleUp && ringDown && pinkyDown;
+
+                // Detect grab (closed fist)
+                const grabDist = Math.sqrt(
+                    Math.pow(middleMCP.x - middleTip.x, 2) +
+                    Math.pow(middleMCP.y - middleTip.y, 2)
+                );
+                isGrabbing = grabDist < 0.06;
+
+                // Detect pinch
+                const thumb = landmarks[4];
+                const pinchDist = Math.sqrt(
+                    Math.pow(thumb.x - indexTip.x, 2) +
+                    Math.pow(thumb.y - indexTip.y, 2)
+                );
+                isPinching = pinchDist < 0.05;
+
+                // Drawing logic
+                if (isVictory && !isGrabbing && !isPinching) {
+                    if (!currentDrawing) {
+                        // Start new drawing
+                        currentDrawing = {
+                            points: [],
+                            color: currentColor,
+                            line: null
+                        };
+                        drawings.push(currentDrawing);
+                    }
+
+                    // Add point to current drawing
+                    currentDrawing.points.push(cursorPos.clone());
+
+                    // Update line
+                    if (currentDrawing.points.length > 1) {
+                        if (currentDrawing.line) {
+                            scene.remove(currentDrawing.line);
+                        }
+
+                        const geometry = new THREE.BufferGeometry().setFromPoints(currentDrawing.points);
+                        const material = new THREE.LineBasicMaterial({
+                            color: currentDrawing.color,
+                            linewidth: 3
+                        });
+                        currentDrawing.line = new THREE.Line(geometry, material);
+                        scene.add(currentDrawing.line);
+                    }
+
+                    cursorMaterial.color.setHex(0x00ff00);
+                    isDrawing = true;
+                } else {
+                    if (currentDrawing) {
+                        currentDrawing = null;
+                    }
+                    isDrawing = false;
+                }
+
+                // Grab to move drawing
+                if (isGrabbing && !isVictory) {
+                    cursorMaterial.color.setHex(0xff0055);
+
+                    if (!selectedDrawing) {
+                        // Find closest drawing
+                        let minDist = Infinity;
+                        drawings.forEach(drawing => {
+                            if (drawing.points.length > 0) {
+                                const dist = cursor.position.distanceTo(drawing.points[0]);
+                                if (dist < minDist && dist < 1) {
+                                    minDist = dist;
+                                    selectedDrawing = drawing;
+                                }
+                            }
+                        });
+                    }
+
+                    if (selectedDrawing) {
+                        // Move drawing
+                        const offset = cursorPos.clone().sub(selectedDrawing.points[0]);
+                        selectedDrawing.points = selectedDrawing.points.map(p => p.clone().add(offset));
+
+                        // Update line
+                        if (selectedDrawing.line) {
+                            scene.remove(selectedDrawing.line);
+                            const geometry = new THREE.BufferGeometry().setFromPoints(selectedDrawing.points);
+                            const material = new THREE.LineBasicMaterial({
+                                color: selectedDrawing.color,
+                                linewidth: 3
+                            });
+                            selectedDrawing.line = new THREE.Line(geometry, material);
+                            scene.add(selectedDrawing.line);
+                        }
+                    }
+                } else {
+                    selectedDrawing = null;
+                }
+
+                // Pinch to rotate drawing
+                if (isPinching && !isVictory && !isGrabbing) {
+                    cursorMaterial.color.setHex(0xbc13fe);
+
+                    drawings.forEach(drawing => {
+                        if (drawing.line) {
+                            drawing.line.rotation.y += 0.02;
+                        }
+                    });
+                }
+
+                // Default cursor color
+                if (!isVictory && !isGrabbing && !isPinching) {
+                    cursorMaterial.color.setHex(currentColor);
+                }
+
+            } else {
+                handDetected = false;
+                statusElement.textContent = 'Qo\'l topilmadi';
+                statusElement.className = 'status';
+                currentDrawing = null;
+                isDrawing = false;
+
+                handPoints.forEach(point => {
+                    point.position.set(0, -100, 0);
+                });
+            }
+        }
+
+        // Animation
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // Animate trail
+            trail.scale.setScalar(1 + Math.sin(Date.now() * 0.005) * 0.3);
+
+            // Rotate point light
+            pointLight.position.x = Math.sin(Date.now() * 0.001) * 8;
+            pointLight.position.z = Math.cos(Date.now() * 0.001) * 8;
+
+            renderer.render(scene, camera);
+        }
+
+        // Controls
+        function clearDrawing() {
+            drawings.forEach(drawing => {
+                if (drawing.line) {
+                    scene.remove(drawing.line);
+                }
+            });
+            drawings.length = 0;
+            currentDrawing = null;
+        }
+
+        function changeColor() {
+            colorIndex = (colorIndex + 1) % colors.length;
+            currentColor = colors[colorIndex];
+            cursorMaterial.color.setHex(currentColor);
+            document.getElementById('currentColor').textContent = colorNames[colorIndex];
+            document.getElementById('currentColor').style.color = '#' + currentColor.toString(16).padStart(6, '0');
+        }
+
+        function toggleMode() {
+            // Placeholder for future modes
+            alert('Chizish rejimi faol!');
+        }
+
+        // Resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // Hide loading
+        setTimeout(() => {
+            document.getElementById('loading').style.display = 'none';
+        }, 2000);
+
+        animate();
+    </script>
+</body>
+
+</html>
